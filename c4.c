@@ -42,8 +42,27 @@ enum { LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,
 enum { CHAR, INT, PTR };
 
 // identifier offsets (since we can't create an ident struct)
+/*
+Tk class type
+hash hash value
+Name: pointer of the string
+Class:
+Type: Sys
+Val: name string
+HClass:
+HType:
+Hval:
+Idsz:
+*/
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz };
 
+
+//the function prase next word
+/*
+  two side effect 
+  1. store data into id, then set the id to current lexcial 
+  2. set tk to appropriate type
+*/
 void next()
 {
   char *pp;
@@ -63,6 +82,7 @@ void next()
       }
       ++line;
     }
+    // skip #include sentence
     else if (tk == '#') {
       while (*p != 0 && *p != '\n') ++p;
     }
@@ -70,8 +90,12 @@ void next()
       pp = p - 1;
       while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')
         tk = tk * 147 + *p++;
+      //147 magic number to generate hash value
       tk = (tk << 6) + (p - pp);
       id = sym;
+      //check if existed in system table.
+      //the hash value serve as a fast compare road, but not accurate. so if their hash values
+      //are equal, compare their memeory.
       while (id[Tk]) {
         if (tk == id[Hash] && !memcmp((char *)id[Name], pp, p - pp)) { tk = id[Tk]; return; }
         id = id + Idsz;
@@ -92,6 +116,7 @@ void next()
       return;
     }
     else if (tk == '/') {
+      //comment
       if (*p == '/') {
         ++p;
         while (*p != 0 && *p != '\n') ++p;
@@ -101,6 +126,7 @@ void next()
         return;
       }
     }
+    //string ??
     else if (tk == '\'' || tk == '"') {
       pp = data;
       while (*p != 0 && *p != tk) {
@@ -110,6 +136,7 @@ void next()
         if (tk == '"') *data++ = ival;
       }
       ++p;
+      // when tk == '\'', single char, can be considered as Num
       if (tk == '"') ival = (int)pp; else tk = Num;
       return;
     }
@@ -126,6 +153,7 @@ void next()
     else if (tk == '*') { tk = Mul; return; }
     else if (tk == '[') { tk = Brak; return; }
     else if (tk == '?') { tk = Cond; return; }
+    //have no specical value
     else if (tk == '~' || tk == ';' || tk == '{' || tk == '}' || tk == '(' || tk == ')' || tk == ']' || tk == ',' || tk == ':') return;
   }
 }
@@ -164,6 +192,7 @@ void expr(int lev)
     }
     else if (d[Class] == Num) { *++e = IMM; *++e = d[Val]; ty = INT; }
     else {
+      //loc is ?
       if (d[Class] == Loc) { *++e = LEA; *++e = loc - d[Val]; }
       else if (d[Class] == Glo) { *++e = IMM; *++e = d[Val]; }
       else { printf("%d: undefined variable\n", line); exit(-1); }
@@ -338,9 +367,10 @@ int main(int argc, char **argv)
   --argc; ++argv;
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
-
-  if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
+  // if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
+  char *argv1 = "/home/ziqiang/c4/hello.c";
+  char **argv2 = &argv1;
+  if ((fd = open(*argv2, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
 
   poolsz = 256*1024; // arbitrary size
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
@@ -366,6 +396,7 @@ int main(int argc, char **argv)
 
   // parse declarations
   line = 1;
+  //here is the real start of parse 
   next();
   while (tk) {
     bt = INT; // basetype
@@ -399,6 +430,7 @@ int main(int argc, char **argv)
       if (id[Class]) { printf("%d: duplicate global definition\n", line); return -1; }
       next();
       id[Type] = ty;
+      //main function declaration
       if (tk == '(') { // function
         id[Class] = Fun;
         id[Val] = (int)(e + 1);
@@ -407,7 +439,7 @@ int main(int argc, char **argv)
           ty = INT;
           if (tk == Int) next();
           else if (tk == Char) { next(); ty = CHAR; }
-          while (tk == Mul) { next(); ty = ty + PTR; }
+          while (tk == Mul) { next(); ty = ty + PTR; }//?
           if (tk != Id) { printf("%d: bad parameter declaration\n", line); return -1; }
           if (id[Class] == Loc) { printf("%d: duplicate parameter definition\n", line); return -1; }
           id[HClass] = id[Class]; id[Class] = Loc;
@@ -417,6 +449,7 @@ int main(int argc, char **argv)
           if (tk == ',') next();
         }
         next();
+        //function implement
         if (tk != '{') { printf("%d: bad function definition\n", line); return -1; }
         loc = ++i;
         next();
@@ -436,7 +469,9 @@ int main(int argc, char **argv)
           }
           next();
         }
+        //e represent address will store pc 
         *++e = ENT; *++e = i - loc;
+        //has parse all delcartion, parse sentence.
         while (tk != '}') stmt();
         *++e = LEV;
         id = sym; // unwind symbol table locals
@@ -450,6 +485,7 @@ int main(int argc, char **argv)
         }
       }
       else {
+        //Glo->Global
         id[Class] = Glo;
         id[Val] = (int)data;
         data = data + sizeof(int);
@@ -461,7 +497,6 @@ int main(int argc, char **argv)
 
   if (!(pc = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
   if (src) return 0;
-
   // setup stack
   bp = sp = (int *)((int)sp + poolsz);
   *--sp = EXIT; // call exit if main returns
@@ -492,9 +527,9 @@ int main(int argc, char **argv)
     else if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
     else if (i == LI)  a = *(int *)a;                                     // load int
     else if (i == LC)  a = *(char *)a;                                    // load char
-    else if (i == SI)  *(int *)*sp++ = a;                                 // store int
+    else if (i == SI)  *(int *)*sp++= a;                                  // store int
     else if (i == SC)  a = *(char *)*sp++ = a;                            // store char
-    else if (i == PSH) *--sp = a;                                         // push
+    else if (i == PSH) *--sp = a;                                         // push      13
 
     else if (i == OR)  a = *sp++ |  a;
     else if (i == XOR) a = *sp++ ^  a;
