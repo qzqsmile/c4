@@ -38,7 +38,7 @@ enum { LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,
        OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,
        OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT };
 
-// types
+// types PTR->pointer
 enum { CHAR, INT, PTR };
 
 // identifier offsets (since we can't create an ident struct)
@@ -192,10 +192,11 @@ void expr(int lev)
     }
     else if (d[Class] == Num) { *++e = IMM; *++e = d[Val]; ty = INT; }
     else {
-      //loc is ?
+      //loc is set when entered each function
       if (d[Class] == Loc) { *++e = LEA; *++e = loc - d[Val]; }
       else if (d[Class] == Glo) { *++e = IMM; *++e = d[Val]; }
       else { printf("%d: undefined variable\n", line); exit(-1); }
+      // char or int 
       *++e = ((ty = d[Type]) == CHAR) ? LC : LI;
     }
   }
@@ -309,6 +310,7 @@ void expr(int lev)
   }
 }
 
+//handle code block
 void stmt()
 {
   int *a, *b;
@@ -331,6 +333,7 @@ void stmt()
     next();
     a = e + 1;
     if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    //assgin 1. number 2.assgin
     expr(Assign);
     if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
     *++e = BZ; b = ++e;
@@ -399,6 +402,7 @@ int main(int argc, char **argv)
   //here is the real start of parse 
   next();
   while (tk) {
+    //global delcaration
     bt = INT; // basetype
     if (tk == Int) next();
     else if (tk == Char) { next(); bt = CHAR; }
@@ -411,6 +415,7 @@ int main(int argc, char **argv)
         while (tk != '}') {
           if (tk != Id) { printf("%d: bad enum identifier %d\n", line, tk); return -1; }
           next();
+          // if set assign in enum
           if (tk == Assign) {
             next();
             if (tk != Num) { printf("%d: bad enum initializer\n", line); return -1; }
@@ -423,6 +428,7 @@ int main(int argc, char **argv)
         next();
       }
     }
+    //parse sentence like int a, b, c;
     while (tk != ';' && tk != '}') {
       ty = bt;
       while (tk == Mul) { next(); ty = ty + PTR; }
@@ -430,18 +436,20 @@ int main(int argc, char **argv)
       if (id[Class]) { printf("%d: duplicate global definition\n", line); return -1; }
       next();
       id[Type] = ty;
-      //main function declaration
+      //function declaration
       if (tk == '(') { // function
         id[Class] = Fun;
         id[Val] = (int)(e + 1);
         next(); i = 0;
+        //parse arguments
         while (tk != ')') {
-          ty = INT;
+          ty = INT;//type
           if (tk == Int) next();
           else if (tk == Char) { next(); ty = CHAR; }
           while (tk == Mul) { next(); ty = ty + PTR; }//?
           if (tk != Id) { printf("%d: bad parameter declaration\n", line); return -1; }
           if (id[Class] == Loc) { printf("%d: duplicate parameter definition\n", line); return -1; }
+          // not clear????
           id[HClass] = id[Class]; id[Class] = Loc;
           id[HType]  = id[Type];  id[Type] = ty;
           id[HVal]   = id[Val];   id[Val] = i++;
@@ -470,6 +478,7 @@ int main(int argc, char **argv)
           next();
         }
         //e represent address will store pc 
+        //i-loc repreent how many memeroy should allocate
         *++e = ENT; *++e = i - loc;
         //has parse all delcartion, parse sentence.
         while (tk != '}') stmt();
@@ -485,7 +494,7 @@ int main(int argc, char **argv)
         }
       }
       else {
-        //Glo->Global
+        //Glo->Global, global variable
         id[Class] = Glo;
         id[Val] = (int)data;
         data = data + sizeof(int);
