@@ -98,6 +98,7 @@ void next()
       //are equal, compare their memeory.
       while (id[Tk]) {
         if (tk == id[Hash] && !memcmp((char *)id[Name], pp, p - pp)) { tk = id[Tk]; return; }
+        //the move id index
         id = id + Idsz;
       }
       id[Name] = (int)pp;
@@ -126,7 +127,7 @@ void next()
         return;
       }
     }
-    //string ??
+    //string, store into data table
     else if (tk == '\'' || tk == '"') {
       pp = data;
       while (*p != 0 && *p != tk) {
@@ -153,7 +154,7 @@ void next()
     else if (tk == '*') { tk = Mul; return; }
     else if (tk == '[') { tk = Brak; return; }
     else if (tk == '?') { tk = Cond; return; }
-    //have no specical value
+    //have no specical value do reset id value
     else if (tk == '~' || tk == ';' || tk == '{' || tk == '}' || tk == '(' || tk == ')' || tk == ']' || tk == ',' || tk == ':') return;
   }
 }
@@ -164,9 +165,11 @@ void expr(int lev)
 
   if (!tk) { printf("%d: unexpected eof in expression\n", line); exit(-1); }
   else if (tk == Num) { *++e = IMM; *++e = ival; next(); ty = INT; }
+  // store string variable
   else if (tk == '"') {
     *++e = IMM; *++e = ival; next();
     while (tk == '"') next();
+    //iterator next vaulable memory, the slot are setted default /0
     data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
   }
   else if (tk == Sizeof) {
@@ -179,14 +182,19 @@ void expr(int lev)
   }
   else if (tk == Id) {
     d = id; next();
+    //function call
     if (tk == '(') {
       next();
       t = 0;
+      //function parameters
       while (tk != ')') { expr(Assign); *++e = PSH; ++t; if (tk == ',') next(); }
       next();
+      //d store function name
       if (d[Class] == Sys) *++e = d[Val];
+      //d[Val] store subroutine pc address
       else if (d[Class] == Fun) { *++e = JSR; *++e = d[Val]; }
       else { printf("%d: bad function call\n", line); exit(-1); }
+      //adjust stack for functino paramters
       if (t) { *++e = ADJ; *++e = t; }
       ty = d[Type];
     }
@@ -201,15 +209,19 @@ void expr(int lev)
     }
   }
   else if (tk == '(') {
+    //parse (int ) (int **)
     next();
     if (tk == Int || tk == Char) {
       t = (tk == Int) ? INT : CHAR; next();
+      // t represent pointers
       while (tk == Mul) { next(); t = t + PTR; }
       if (tk == ')') next(); else { printf("%d: bad cast\n", line); exit(-1); }
       expr(Inc);
+      // store types
       ty = t;
     }
     else {
+      // (1+2)
       expr(Assign);
       if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
     }
@@ -251,6 +263,7 @@ void expr(int lev)
       if (*e == LC || *e == LI) *e = PSH; else { printf("%d: bad lvalue in assignment\n", line); exit(-1); }
       expr(Assign); *++e = ((ty = t) == CHAR) ? SC : SI;
     }
+    // ?
     else if (tk == Cond) {
       next();
       *++e = BZ; d = ++e;
@@ -457,7 +470,7 @@ int main(int argc, char **argv)
           if (tk == ',') next();
         }
         next();
-        //function implement
+        //function implement, this part only parse delcaretion
         if (tk != '{') { printf("%d: bad function definition\n", line); return -1; }
         loc = ++i;
         next();
